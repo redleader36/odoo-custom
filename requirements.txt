@@ -1,0 +1,4 @@
+# ── Additional pip packages for Odoo ───────────────────────────────────
+#
+packaging
+easypost

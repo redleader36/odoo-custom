@@ -1,0 +1,103 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# odoo-custom — GitHub Actions workflow
+#
+# Triggers:
+#   1) Push to main branch        → always builds & pushes
+#   2) Scheduled (daily at 06:00) → detects new Odoo upstream releases,
+#                                    rebuilds only when a newer date-tagged
+#                                    Odoo image exists
+#   3) workflow_dispatch          → manual trigger from the Actions tab
+#
+# Images are pushed to GitHub Container Registry (ghcr.io).
+#
+# No secrets to configure — GITHUB_TOKEN (auto-created by Actions) has
+# write access to GHCR for the current repo.
+# ──────────────────────────────────────────────────────────────────────────────
+name: Build Odoo Custom Image
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * *"          # daily at 06:00 UTC
+  workflow_dispatch:              # manual trigger
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  ODOO_VERSION: "18.0"           # ← change this to track a different version
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login "$REGISTRY" \
+              -u "${{ github.actor }}" --password-stdin
+
+      - name: Determine Odoo version to build
+        id: odoo-check
+        run: |
+          chmod +x ./scripts/check-upstream.sh
+
+          if [ "${{ github.event_name }}" = "schedule" ] || \
+             [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # ── Scheduled / manual: detect latest Odoo release ─────
+            LATEST=$(
+              ./scripts/check-upstream.sh "$ODOO_VERSION"
+            )
+            echo "Latest Odoo date tag: ${LATEST}"
+
+            if [ -z "$LATEST" ]; then
+              echo "ERROR: could not determine latest Odoo tag for $ODOO_VERSION"
+              exit 1
+            fi
+
+            # Already in our registry?
+            if docker manifest inspect \
+              "$REGISTRY/$IMAGE_NAME:$LATEST" >/dev/null 2>&1; then
+              echo "✔  ${LATEST} already exists — nothing to build."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "⟳  New Odoo release ${LATEST} — building."
+            echo "build_tag=${LATEST}"  >> "$GITHUB_OUTPUT"
+            echo "extra_tags=${ODOO_VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            # ── Push to main: always build ─────────────────────────
+            echo "build_tag=${ODOO_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "extra_tags=latest ${ODOO_VERSION%.*}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push Docker image
+        if: steps.odoo-check.outputs.skip != 'true'
+        run: |
+          BT="${{ steps.odoo-check.outputs.build_tag }}"
+          ET="${{ steps.odoo-check.outputs.extra_tags }}"
+
+          docker build \
+            --pull \
+            --build-arg ODOO_VERSION="$BT" \
+            -t "$REGISTRY/$IMAGE_NAME:$BT" \
+            .
+
+          for tag in $ET; do
+            docker tag \
+              "$REGISTRY/$IMAGE_NAME:$BT" \
+              "$REGISTRY/$IMAGE_NAME:$tag"
+          done
+
+          for tag in $BT $ET; do
+            echo "Pushing $REGISTRY/$IMAGE_NAME:$tag"
+            docker push "$REGISTRY/$IMAGE_NAME:$tag"
+          done
