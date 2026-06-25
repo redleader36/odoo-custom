@@ -27,7 +27,7 @@ LABEL org.opencontainers.image.source="https://gitlab.com/redleader36/odoo-custo
 # Add your packages to requirements.txt in this repo. Every build will
 # install them inside the Odoo image's Python environment.
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt \
     && rm -f /tmp/requirements.txt
 
 # ── Optional: custom Odoo addons or scripts ────────────────────────────
