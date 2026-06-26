@@ -24,10 +24,12 @@ LABEL org.opencontainers.image.source="https://gitlab.com/redleader36/odoo-custo
 #       && rm -rf /var/lib/apt/lists/*
 
 # ── Additional pip packages ────────────────────────────────────────────
-# Add your packages to requirements.txt in this repo. Every build will
-# install them inside the Odoo image's Python environment.
+# Install as root so packages go to system site-packages, not to odoo's
+# home directory (which gets shadowed by a volume mount at runtime).
+USER root
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
+USER odoo
 
 # ── Optional: custom Odoo addons or scripts ────────────────────────────
 # COPY custom-addons/ /mnt/extra-addons/
