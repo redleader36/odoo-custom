@@ -28,7 +28,7 @@ LABEL org.opencontainers.image.source="https://gitlab.com/redleader36/odoo-custo
 # home directory (which gets shadowed by a volume mount at runtime).
 USER root
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
+RUN pip install --no-cache-dir --break-system-packages --ignore-installed -r /tmp/requirements.txt
 USER odoo
 
 # ── Optional: custom Odoo addons or scripts ────────────────────────────
