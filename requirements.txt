@@ -1,4 +1,4 @@
 # ── Additional pip packages for Odoo ───────────────────────────────────
 #
 packaging
-easypost
+easypost==7.15.0
